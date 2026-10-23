@@ -1,0 +1,16 @@
+{
+  "name": "sfui",
+  "version": "1.0.0",
+  "description": "",
+  "scripts": {
+    "start": "python3 serve.py 8080"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "three": "^0.186.1"
+  },
+  "private": true
+}

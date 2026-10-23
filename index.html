@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#010407">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Asset Intelligence // Cell-07</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;800&display=swap" rel="stylesheet">
+<style>
+  html, body {
+    margin: 0; height: 100%; background: var(--page); overflow: hidden;
+    touch-action: none; overscroll-behavior: none; -webkit-user-select: none; user-select: none;
+    -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent;
+  }
+  /* ノッチ・ホームバーの安全領域を JS から読むための隠し要素 */
+  #safe { position: fixed; left: 0; top: 0; width: 0; height: 0; visibility: hidden; pointer-events: none;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+  /* 文字入力を受ける隠し入力欄。16px未満だとiOSが入力時にページを拡大する */
+  #pwIn, #cliIn { position: fixed; left: 0; top: 0; width: 1px; height: 1px; opacity: 0; border: 0; padding: 0; margin: 0; font-size: 16px; background: transparent; color: transparent; -webkit-user-select: text; user-select: text; }
+  #gl, #overlay { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #gl { cursor: crosshair; }
+  #overlay { pointer-events: none; }
+  #labels { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
+  :root {
+    --ink: #e6f2ff; --ink-line: rgba(220, 240, 255, .55); --card-bg: rgba(10, 20, 32, .62); --col-ink: rgba(215, 236, 255, .8);
+    --glass-a: rgba(20, 32, 46, .52); --glass-b: rgba(6, 12, 20, .44);
+    --btn: rgba(110, 165, 225, .14); --btn-ln: rgba(190, 225, 255, .38); --btn-fg: rgba(215, 236, 255, .8); --btn-hover: rgba(150, 200, 250, .30);
+    --chip-bg: rgba(8, 15, 24, .70); --chip-ln: rgba(190, 225, 255, .30); --chip-fg: rgba(215, 236, 255, .88);
+    --chip-on: rgba(110, 165, 225, .40); --chip-on-ln: rgba(215, 240, 255, .85); --chip-act: rgba(150, 200, 250, .45);
+    --mode-bg: rgba(255, 110, 210, .12); --mode-ln: rgba(255, 150, 230, .50); --mode-fg: rgba(255, 215, 245, .92); --mode-hover: rgba(255, 130, 220, .28);
+    --page: #010407;
+  }
+  /* Amber Atlas: 琥珀を基調にしたテーマ（CTIモード） */
+  body[data-theme="amber"] {
+    --ink: #ffe9cc; --ink-line: rgba(255, 200, 130, .55); --card-bg: rgba(30, 18, 6, .62); --col-ink: rgba(255, 226, 190, .8);
+    --glass-a: rgba(46, 30, 14, .52); --glass-b: rgba(18, 10, 4, .46);
+    --btn: rgba(255, 160, 60, .14); --btn-ln: rgba(255, 200, 130, .40); --btn-fg: rgba(255, 226, 190, .85); --btn-hover: rgba(255, 180, 80, .30);
+    --chip-bg: rgba(22, 13, 5, .72); --chip-ln: rgba(255, 200, 130, .32); --chip-fg: rgba(255, 228, 192, .9);
+    --chip-on: rgba(255, 160, 60, .38); --chip-on-ln: rgba(255, 226, 180, .85); --chip-act: rgba(255, 180, 80, .45);
+    --mode-bg: rgba(60, 200, 220, .12); --mode-ln: rgba(120, 230, 240, .55); --mode-fg: rgba(200, 246, 251, .92); --mode-hover: rgba(80, 220, 235, .28);
+    --page: #070401;
+  }
+  :root { --serif: "Shippori Mincho", "Noto Serif JP", "Hiragino Mincho ProN", "Yu Mincho", "BIZ UDMincho", "IPAMincho", serif; --sans: "Inter", "Helvetica Neue", "Hiragino Kaku Gothic ProN", "Noto Sans JP", system-ui, sans-serif; }
+  .card {
+    position: absolute; left: 0; top: 0; white-space: nowrap; will-change: transform, opacity; opacity: 0;
+    font: 400 12px/1.5 var(--sans); color: var(--ink); letter-spacing: .01em;
+    padding: 5px 12px 5px 12px; border-left: 1px solid var(--ink-line);
+    background: linear-gradient(90deg, var(--card-bg), transparent);
+    text-shadow: 0 0 8px rgba(0, 0, 0, .8);
+  }
+  .card .h { font-size: 15px; color: var(--tc, #fff); letter-spacing: .02em; margin-bottom: 2px; }
+  .card .l { font-size: 11.5px; opacity: .86; }
+  .card .l.d { opacity: .5; line-height: .8; }
+  .card .l.jp { font-family: var(--serif); letter-spacing: .12em; }
+  .card.mini { padding: 1px 8px; background: none; text-shadow: 0 0 6px rgba(0, 0, 0, .9); }
+  .card.mini .h { font-size: 10.5px; margin: 0; letter-spacing: .1em; opacity: .9; }
+  .card.mini.col { border-left: 0; padding: 0; text-align: center; }
+  .card.mini.col .h { font-size: 9.5px; color: var(--col-ink); }
+  .card.mini.col .l { font-size: 9px; opacity: .6; }
+  .card.hub .h { font-size: 20px; }
+  .card.hub .l { font-size: 12px; }
+  /* 外形は clip-path（overlay.js が面取りした多角形で設定）。枠線は canvas 側で描く */
+  .glass {
+    position: fixed; pointer-events: auto; touch-action: none; opacity: 0; will-change: opacity;
+    background: linear-gradient(180deg, var(--glass-a), var(--glass-b));
+    -webkit-backdrop-filter: blur(9px) saturate(1.1); backdrop-filter: blur(9px) saturate(1.1);
+  }
+  #topBtns { position: fixed; top: 6px; right: 14px; z-index: 20; display: flex; gap: 8px; }
+  #fsBtn, #modeBtn, #quietBtn, #cfgBtn {
+    height: 19px; padding: 0 12px 0 14px; cursor: pointer;
+    font: 400 9px/19px ui-monospace, "SF Mono", Menlo, Consolas, var(--serif); letter-spacing: .12em; color: var(--btn-fg);
+    background: var(--btn); border: 0; box-shadow: inset 0 0 0 1px var(--btn-ln);
+    clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px);
+    transition: background .2s, color .2s;
+  }
+  #modeBtn { box-shadow: inset 0 0 0 1px var(--mode-ln); color: var(--mode-fg); background: var(--mode-bg); }
+  #modeBtn:hover { background: var(--mode-hover); color: #fff; }
+  #fsBtn:hover, #quietBtn:hover, #cfgBtn:hover { background: var(--btn-hover); color: #fff; }
+  #quietBtn.on { background: var(--chip-on); color: #fff; box-shadow: inset 0 0 0 1px var(--chip-on-ln); }
+  /* 操作チップ（狭い画面・タッチ端末）: パネル切り替え、前後のアセット、コマンド、全画面 */
+  #chips { position: fixed; z-index: 6; display: none; gap: 6px; box-sizing: border-box; }
+  #chips .sc { flex: 1 1 0; min-width: 0; display: flex; gap: 6px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; touch-action: pan-x; }
+  #chips .sc::-webkit-scrollbar { display: none; }
+  .chip {
+    flex: 0 0 auto; height: 100%; min-width: 36px; padding: 0 11px; border: 0; cursor: pointer; color: var(--chip-fg);
+    background: var(--chip-bg); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+    box-shadow: inset 0 0 0 1px var(--chip-ln);
+    clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+    font: 400 10px/1.15 ui-monospace, "SF Mono", Menlo, Consolas, var(--serif); letter-spacing: .1em;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; touch-action: manipulation;
+  }
+  .chip i { font-style: normal; font-size: 8px; opacity: .62; font-family: var(--serif); letter-spacing: .22em; }
+  .chip.nav { font-size: 18px; min-width: 40px; }
+  .chip.on { background: var(--chip-on); color: #fff; box-shadow: inset 0 0 0 1px var(--chip-on-ln); }
+  .chip:active { background: var(--chip-act); }
+  #chips.mini .sc, #chips.mini .fold { display: none; }
+  .nofs #fsBtn { display: none !important; }
+  .chip.mode { box-shadow: inset 0 0 0 1px var(--mode-ln); color: var(--mode-fg); }
+  .chip.quiet.on { background: var(--chip-on); color: #fff; box-shadow: inset 0 0 0 1px var(--chip-on-ln); }
+
+  /* 設定画面 */
+  #cfg { position: fixed; inset: 0; z-index: 40; display: none; align-items: center; justify-content: center; touch-action: none; }
+  #cfg.open { display: flex; }
+  .cfg-back { position: absolute; inset: 0; background: rgba(0, 4, 8, .55); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
+  .cfg-frame {
+    position: relative; display: flex; width: min(600px, calc(100vw - 24px)); padding: 1px; box-sizing: border-box;
+    max-height: calc(100vh - 32px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); max-height: calc(100dvh - 32px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    background: var(--ink-line);
+    clip-path: polygon(20px 0, 100% 0, 100% calc(100% - 20px), calc(100% - 20px) 100%, 0 100%, 0 20px);
+  }
+  .cfg-body {
+    flex: 1; display: flex; flex-direction: column; min-height: 0; color: var(--ink);
+    background: linear-gradient(180deg, var(--glass-a), var(--glass-b)), rgba(3, 7, 12, .66);
+    -webkit-backdrop-filter: blur(14px) saturate(1.1); backdrop-filter: blur(14px) saturate(1.1);
+    clip-path: polygon(19.4px 0, 100% 0, 100% calc(100% - 19.4px), calc(100% - 19.4px) 100%, 0 100%, 0 19.4px);
+  }
+  .cfg-head { display: flex; align-items: center; gap: 10px; padding: 16px 18px 12px 26px; border-bottom: 1px solid var(--chip-ln); }
+  .cfg-head .cfg-sq { width: 6px; height: 6px; background: var(--ink); }
+  .cfg-head .en { font: 400 14px/1 ui-monospace, "SF Mono", Menlo, Consolas, monospace; letter-spacing: .22em; }
+  .cfg-head .jp { font: 500 11px/1 var(--serif); letter-spacing: .3em; opacity: .6; flex: 1; }
+  .cfg-x { width: 30px; height: 30px; border: 0; cursor: pointer; color: var(--btn-fg); background: var(--btn); font-size: 12px; }
+  .cfg-x:hover, .cfg-reset:hover { background: var(--btn-hover); color: #fff; }
+  .cfg-list { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; padding: 4px 0 8px; scrollbar-width: thin; scrollbar-color: var(--btn-ln) transparent; }
+  .cfg-group { display: flex; align-items: baseline; gap: 10px; padding: 14px 26px 6px; font: 400 10px/1 ui-monospace, "SF Mono", Menlo, Consolas, monospace; letter-spacing: .24em; color: var(--col-ink); }
+  .cfg-group i { font: 500 10px/1 var(--serif); letter-spacing: .3em; opacity: .55; }
+  .cfg-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 8px 20px 8px 26px; min-height: 36px; cursor: pointer; border-bottom: 1px solid rgba(128, 160, 200, .10); }
+  .cfg-row:hover { background: var(--btn); }
+  .cfg-row .lb b { display: block; font: 500 12.5px/1.35 var(--sans); }
+  .cfg-row .lb i { display: block; font: 500 10.5px/1.4 var(--serif); letter-spacing: .1em; opacity: .58; font-style: normal; }
+  .cfg-sw { position: relative; flex: none; width: 58px; height: 22px; background: var(--btn); box-shadow: inset 0 0 0 1px var(--btn-ln); transition: background .2s;
+    clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px); }
+  .cfg-sw .knob { position: absolute; left: 4px; top: 4px; width: 14px; height: 14px; background: var(--btn-fg); opacity: .6; transition: transform .2s, opacity .2s, background .2s; }
+  .cfg-sw .st { position: absolute; right: 8px; top: 0; font: 400 9px/22px ui-monospace, "SF Mono", Menlo, Consolas, monospace; letter-spacing: .12em; opacity: .55; }
+  .cfg-sw.on { background: var(--chip-on); box-shadow: inset 0 0 0 1px var(--chip-on-ln); }
+  .cfg-sw.on .knob { transform: translateX(36px); background: #fff; opacity: 1; }
+  .cfg-sw.on .st { right: auto; left: 9px; opacity: .95; color: #fff; }
+  .cfg-seg { flex: none; display: flex; gap: 4px; }
+  .cfg-seg button { height: 24px; min-width: 38px; padding: 0 9px; border: 0; cursor: pointer; color: var(--btn-fg); background: var(--btn); box-shadow: inset 0 0 0 1px var(--btn-ln);
+    font: 400 9.5px/24px ui-monospace, "SF Mono", Menlo, Consolas, monospace; letter-spacing: .1em; }
+  .cfg-seg button.on { background: var(--chip-on); color: #fff; box-shadow: inset 0 0 0 1px var(--chip-on-ln); }
+  .cfg-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 22px 14px 26px; border-top: 1px solid var(--chip-ln); }
+  .cfg-foot .note { font: 500 10px/1.4 var(--serif); letter-spacing: .06em; opacity: .5; }
+  .cfg-reset { flex: none; height: 26px; padding: 0 14px; border: 0; cursor: pointer; color: var(--btn-fg); background: var(--btn); box-shadow: inset 0 0 0 1px var(--btn-ln); font: 400 9px/26px ui-monospace, "SF Mono", Menlo, Consolas, monospace; letter-spacing: .12em; }
+  /* 上部ボタンは狭めのPC画面ではアイコンだけにする */
+  #quietBtn .tx, #cfgBtn .tx { display: none; }   /* 静穏・設定は常にアイコンだけ（状態は色で分かる） */
+  @media (max-width: 1499px) { #topBtns .tx { display: none; } #topBtns button { padding: 0 11px; } }
+  #loginGo {
+    position: fixed; display: none; z-index: 12; border: 0; cursor: pointer; color: #eaf8ff; letter-spacing: .22em;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, var(--serif); background: rgba(110, 165, 225, .28);
+    box-shadow: inset 0 0 0 1px rgba(210, 238, 255, .7);
+    clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px); touch-action: manipulation;
+  }
+  #loginGo:active { background: rgba(160, 210, 255, .5); }
+  @media (max-width: 899px) {
+    #topBtns { top: 70px; left: 12px; right: auto; gap: 6px; z-index: 8; }
+    #topBtns #modeBtn, #topBtns #quietBtn { display: none; }
+    #topBtns #fsBtn, #topBtns #cfgBtn { width: 34px; height: 34px; padding: 0; text-align: center; font-size: 16px; line-height: 34px;
+      background: var(--chip-bg); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); box-shadow: inset 0 0 0 1px var(--chip-ln); color: var(--chip-fg); }
+    .cfg-row { min-height: 46px; }
+    .cfg-seg button { height: 30px; min-width: 42px; line-height: 30px; }
+    .cfg-sw { width: 64px; height: 26px; } .cfg-sw .st { line-height: 26px; } .cfg-sw .knob { top: 6px; } .cfg-sw.on .knob { transform: translateX(42px); }
+    .card .l { display: none; }
+    .card .h { font-size: 12px; }
+    .card.hub .h { font-size: 14px; }
+    .card.mini:not(.col) { display: none; }
+    .card.mini.col .h { font-size: 7.5px; letter-spacing: .04em; }
+  }
+  #login { position: fixed; inset: 0; z-index: 10; transition: opacity .9s ease; }
+  #loginCv { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "./node_modules/three/build/three.module.js",
+  "three/addons/": "./node_modules/three/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div id="labels"></div>
+<div id="glass"></div>
+<canvas id="overlay"></canvas>
+<div id="topBtns"><button id="quietBtn" tabindex="-1"></button><button id="modeBtn" tabindex="-1"></button><button id="cfgBtn" tabindex="-1" title="CONFIG ／ 設定"><span class="ic">⚙</span><span class="tx"> CONFIG ／ 設定</span></button><button id="fsBtn" tabindex="-1"></button></div>
+<div id="safe"></div>
+<input id="cliIn" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="80" enterkeyhint="send" aria-label="command">
+<div id="login">
+  <div id="loginGlass" class="glass"></div><canvas id="loginCv"></canvas>
+  <input id="pwIn" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="28" enterkeyhint="go" aria-label="password">
+  <button id="loginGo" tabindex="-1">AUTHENTICATE ／ 認証</button>
+</div>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
