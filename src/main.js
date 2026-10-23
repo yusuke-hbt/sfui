@@ -395,7 +395,11 @@ addEventListener('keydown', (e) => { if (started && !cli.open && !cfgScreen.open
 // ---- 設定（settings.js）の反映。すべての入口が settings.set() を通り、ここで実際の表示に反映する ----
 const quietBtn = document.getElementById('quietBtn');
 const cfgBtn = document.getElementById('cfgBtn');
+const hudBtn = document.getElementById('hudBtn');
 const quietLabel = () => { quietBtn.innerHTML = quietGoal ? btnHtml('◉', 'QUIET ON ／ 静穏') : btnHtml('◌', 'QUIET ／ 静穏'); quietBtn.title = '静穏モード'; quietBtn.classList.toggle('on', !!quietGoal); };
+// パネルの一括退避（HUD を隠す）。保存はしない一時的な状態。
+const hudLabel = () => { const h = overlay.isHudHidden(); hudBtn.innerHTML = btnHtml(h ? '◧' : '▤', h ? 'PANELS OFF ／ 退避中' : 'PANELS ／ 表示'); hudBtn.title = 'パネルを隠す / 戻す (H)'; hudBtn.classList.toggle('on', h); };
+const hudToggle = (v) => { overlay.setHud(v === undefined ? !overlay.isHudHidden() : v); hudLabel(); overlay.placeChips(); };
 const BLOOM = { off: 0, low: 0.08, normal: 0.18, high: 0.34 };
 function apply(key, v) {
   switch (key) {
@@ -421,12 +425,16 @@ const quietToggle = () => settings.set('quiet', !settings.get('quiet'));
 quietBtn.addEventListener('mousedown', (e) => e.preventDefault());
 quietBtn.addEventListener('click', () => started && quietToggle());
 cfgBtn.addEventListener('mousedown', (e) => e.preventDefault());
+hudBtn.addEventListener('mousedown', (e) => e.preventDefault());
+hudBtn.addEventListener('click', () => started && hudToggle());
+hudLabel();
 cfgBtn.addEventListener('click', () => started && cfgScreen.toggle());
 addEventListener('keydown', (e) => {
   if (!started || cli.open || e.ctrlKey || e.metaKey || e.altKey) return;
   if (cfgScreen.open) { if (e.key === 'Escape') cfgScreen.hide(); return; }
   if (e.key === 'q' || e.key === 'Q') quietToggle();
   else if (e.key === 'c' || e.key === 'C') cfgScreen.show();
+  else if (e.key === 'h' || e.key === 'H') hudToggle();
 });
 
 // ---- コマンドライン ----
@@ -440,7 +448,7 @@ function logout() {
   U.uSelA.value = -1; U.uPrevA.value = -1; U.uHoverA.value = -1;
   graph.dispose(); graph.pending = null; graph.beamAssets = [];
   field.group.visible = false; overlay.chips.style.visibility = 'hidden';
-  overlay.reset(); login.reset(loginT);
+  overlay.reset(); login.reset(loginT); hudLabel();
 }
 const cli = new Cli({
   assets, state, controls, input: document.getElementById('cliIn'),
@@ -450,6 +458,7 @@ const cli = new Cli({
   camPreset: (name) => { camTween = { from: camera.position.clone(), to: new Vector3(...(state.mode === 'cti' ? CTI_PRESETS : PRESETS)[name]).multiplyScalar(camScale), t: 0 }; lastInteract = clockT; },
   setMode: (m) => setMode(m), selectActor, setTheme,
   getSetting: (k) => settings.get(k), setSetting: (k, v) => settings.set(k, v), resetSettings: () => settings.reset(), openConfig: () => cfgScreen.show(),
+  getHud: () => overlay.isHudHidden(), setHud: (v) => hudToggle(v),
 });
 state.cli = cli;
 // タッチ操作の入口（overlay.js の操作チップ・一覧タップから呼ばれる）
@@ -459,6 +468,7 @@ state.ui = {
     : select(state.selected < 0 ? 0 : (state.selected + d + assets.length) % assets.length)),
   mode: () => setMode(state.mode === 'cti' ? 'asset' : 'cti'),
   quiet: quietToggle,
+  hud: () => hudToggle(),
   config: () => cfgScreen.toggle(),
   pick: (i) => { (state.mode === 'cti' ? selectActor : select)(i); if (touch && navigator.vibrate) navigator.vibrate(8); },
   cmd: () => (cli.open ? cli.close() : cli.openUI()),
@@ -475,4 +485,4 @@ for (const [k, v] of Object.entries(settings.values)) apply(k, v);   // 保存�
 requestAnimationFrame(frame);
 
 if (params.get('mode') === 'cti') setMode('cti');   // 検証用: ?mode=cti でCTIから始める
-window.__sfui = { select, selectActor, setMode, setQuiet: (on) => settings.set('quiet', on), settings, cfgScreen, state, camera, controls, cli, field };
+window.__sfui = { overlay, hudToggle, select, selectActor, setMode, setQuiet: (on) => settings.set('quiet', on), settings, cfgScreen, state, camera, controls, cli, field };

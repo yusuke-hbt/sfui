@@ -1,6 +1,7 @@
 import { rng, GRID, SPACING, STATE_NAMES } from './data.js';
 import { typeCss } from './graph.js';
 import { installCtiPanels } from './ctipanels.js';
+import { installWidgets } from './widgets.js';
 import { patchCtx, mapCss } from './theme.js';
 
 // 画面座標に固定した2Dレイヤー。3D側とは独立した時計・独立した周期で動く。
@@ -53,6 +54,7 @@ export class Overlay {
     this.riskShown = 0;
     this.touch = matchMedia('(pointer: coarse)').matches;
     this.sheet = 'detail'; this.sheetOn = true; this.swT = {}; this.hit = {};
+    this.hudHidden = false; this.hv = 0;   // パネルを捌けさせる（hv: 0=表示 → 1=退避済み）
     this.buildChips();
     // Webフォントはcanvasからは自動で読み込まれないので、使う字を先に要求しておく
     try { document.fonts.load('500 12px "Shippori Mincho"', JP_ALL); document.fonts.load('800 12px "Shippori Mincho"', JP_ALL); } catch (e) { /* フォールバック書体で描く */ }
@@ -70,8 +72,9 @@ export class Overlay {
   // ログアウト用: 表示状態を初期化し、次のログイン後にもう一度起動演出から始める
   reset() {
     this.log = []; this.ilog = []; this.lastPush = 0; this.riskShown = 0; this.done = {}; this.cliVis = 0; this.mt = 0;
+    this.hudHidden = false; this.hv = 0;
     if (this.cliGlass) this.cliGlass.style.opacity = 0;
-    Object.values(this.glass).forEach((el) => { el.style.opacity = 0; });
+    Object.values(this.glass).forEach((el) => { el.style.opacity = 0; el.style.transform = ''; el._hid = false; });
     this.ctx.clearRect(0, 0, this.W, this.H);
   }
 
@@ -215,6 +218,14 @@ export class Overlay {
   }
 
   toggleSheet() { this.sheetOn = !this.sheetOn; this.swT[this.sheet] = this.t || 0; this.layout(); }
+
+  // パネルを一括で隠す / 戻す。広い画面では各パネルを近い画面端へ滑らせて退避し、狭い画面ではシートを畳む。
+  isHudHidden() { return this.compact ? !this.sheetOn : this.hudHidden; }
+  setHud(hidden) {
+    if (this.compact) { if (this.sheetOn === hidden) this.toggleSheet(); return; }
+    this.hudHidden = !!hidden;
+  }
+
 
   // パネルをタップした時: 一覧の行ならそのアセットを選択する（パネルの下の3Dには何も起きない）
   panelTap(name, x, y) {
@@ -419,20 +430,33 @@ export class Overlay {
 
     const names = this.compact ? [this.sheet] : ['tabs', 'map', 'alist', 'elog', 'detail', 'related', 'timeline', 'layer'];
     for (const [n, el] of Object.entries(this.glass)) el.style.display = names.includes(n) && this.R[n] ? 'block' : 'none';
+    // 退避の進み具合（約0.9秒）
+    const dh = Math.min(0.1, Math.max(0, t - (this.hvT ?? t))); this.hvT = t;
+    const hg = this.hudHidden && !this.compact ? 1 : 0;
+    this.hv = hg > this.hv ? Math.min(1, this.hv + dh / 0.9) : Math.max(0, this.hv - dh / 0.9);
     for (const n of names) {
       const r = this.R[n];
       if (!r) continue;
+      const el = this.glass[n];
+      // 手前のパネルから順に、近い画面端へ滑って消える
+      const hp = this.hv > 0 ? sm(this.hv * 1.5 - r.idx * 0.07) : 0;
+      if (hp >= 0.999) { el.style.display = 'none'; continue; }
+      const side = n === 'tabs' ? [0, -(r.y + r.h + 24)] : n === 'timeline' || n === 'layer' ? [0, this.H - r.y + 24] : r.x + r.w / 2 < this.W / 2 ? [-(r.x + r.w + 24), 0] : [this.W - r.x + 24, 0];
+      if (hp > 0.001) { el.style.transform = `translate(${side[0] * hp}px,${side[1] * hp}px)`; el.style.opacity = 1 - hp; el._hid = true; }
+      else if (el._hid) { el.style.transform = ''; el.style.opacity = 1; el._hid = false; }
+      ctx.save();
+      if (hp > 0.001) { ctx.translate(side[0] * hp, side[1] * hp); ctx.globalAlpha = 1 - hp; }
       // 枠線の描き上げ → すりガラスが満ちる → 中身が上から現れる、の3段階
       const tr = t - (this.mt || 0);
       const gp = sm((tr - r.t0 - 0.35) / 0.8), cp = sm((tr - r.t0 - 0.65) / 0.8);
-      if (!this.done[n]) { this.glass[n].style.opacity = gp; if (gp >= 1) this.done[n] = true; }
+      if (!this.done[n] && hp <= 0.001) { el.style.opacity = gp; if (gp >= 1) this.done[n] = true; }
       this.frame(r, tr);
-      if (cp <= 0.01) continue;
+      if (cp <= 0.01) { ctx.restore(); continue; }
       ctx.save();
       this.path(this.poly(r)); ctx.clip();
       if (cp < 1) {
         ctx.beginPath(); ctx.rect(r.x - 2, r.y - 2, r.w + 4, r.h * cp + 2); ctx.clip();
-        ctx.globalAlpha = cp * (0.75 + 0.25 * (this.q > 0.5 || Math.sin(cp * 90) > -0.2 ? 1 : 0));
+        ctx.globalAlpha *= cp * (0.75 + 0.25 * (this.q > 0.5 || Math.sin(cp * 90) > -0.2 ? 1 : 0));
       }
       (this.state.mode === 'cti' && this[`c_${n}`] ? this[`c_${n}`] : this[n]).call(this, r, t);
       ctx.restore();
@@ -440,6 +464,7 @@ export class Overlay {
         const y = r.y + r.h * cp;
         ctx.fillStyle = `rgba(215,240,255,${0.7 * (1 - cp)})`; ctx.fillRect(r.x + 4, y, r.w - 8, 1.5);
       }
+      ctx.restore();
     }
     this.deco(t);
   }
@@ -471,8 +496,10 @@ export class Overlay {
     this.T(`UTC ${d.toISOString().slice(0, 10)} ${d.toISOString().slice(11, 19)}`, W - 16, 40 * u, { s: 12.5, a: 'right', c: DIM, ls: 0.5 });
     if (!this.compact) {
       const tb = this.R.tabs;
+      ctx.save(); ctx.globalAlpha *= 1 - this.hv;   // タブが退避したら、つなぐ信号線も消す
       this.signal(346 * u, tb.x - 16, 31 * u, t, 0);
       this.signal(tb.x + tb.w + 16, W - 14 - rw - 6, 31 * u, t, 1.7);
+      ctx.restore();
     }
     ctx.restore();
   }
@@ -658,7 +685,7 @@ export class Overlay {
   // 隣り合うパネル同士を結ぶ点線コネクタ
   links(t) {
     const { ctx, u, R } = this;
-    const a = sm((t - 2.6) / 1.0);
+    const a = sm((t - 2.6) / 1.0) * (1 - this.hv);
     if (a <= 0) return;
     ctx.save(); ctx.globalAlpha = a; ctx.lineWidth = 1;
     [['map', 'alist', 0], ['alist', 'elog', 0], ['detail', 'related', 1]].forEach(([p, q, right], i) => {
@@ -718,7 +745,7 @@ export class Overlay {
       this.T(`X ${a.x.toFixed(1)}  Z ${a.z.toFixed(1)}  LD ${(a.load * 100).toFixed(0)}`, tx, ty + 25 * u, { s: 8.5, f: MONO, c: 'rgba(170,200,230,.55)', ls: 0.8, a: al });
     }
     ctx.restore();
-    if (this.compact) return;
+    if (this.compact || this.hv > 0.98) return;
 
     // 引出線: 縦→横→短い斜めで、Detailのリングとミニマップの選択点へ
     const pl = sm((age - 0.3) / 1.0);
@@ -728,7 +755,7 @@ export class Overlay {
       const sx = L.x + sg * S, sy = L.y - S * (i ? 0.2 : 0.5);
       const dy = ey - sy, dir = Math.sign(dy) || 1, dd = Math.min(Math.abs(dy), 70 * u, Math.abs(ex - sx) * 0.5), v = Math.abs(dy) - dd;
       const pts = [[sx, sy], [sx, sy + dir * v], [ex - sg * dd, sy + dir * v], [ex, ey]];
-      ctx.save(); ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(205,236,255,.42)';
+      ctx.save(); ctx.globalAlpha = 1 - this.hv; ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(205,236,255,.42)';
       const end = this.trace(pts, pl, false);
       ctx.setLineDash([2, 3]); ctx.lineDashOffset = -this.mo * 6;
       if (pl >= 1) {
@@ -952,6 +979,12 @@ export class Overlay {
     ctx.beginPath(); ctx.moveTo(0, -dep / 2); ctx.lineTo(0, -dep / 2 - 6 * u); ctx.moveTo(-3 * u, -dep / 2 - 3 * u); ctx.lineTo(0, -dep / 2 - 6 * u); ctx.lineTo(3 * u, -dep / 2 - 3 * u); ctx.stroke();
     ctx.restore();
 
+    // 縮尺バー（1マス＝SPACING）
+    {
+      const bx = mx + 8 * u, by = my + mh - 9 * u, bl = SPACING * sc;
+      ctx.fillStyle = 'rgba(190,225,255,.55)'; ctx.fillRect(bx, by, bl, 1); ctx.fillRect(bx, by - 3 * u, 1, 6 * u); ctx.fillRect(bx + bl, by - 3 * u, 1, 6 * u);
+      this.T(`${SPACING.toFixed(1)} m / CELL`, bx + bl + 6 * u, by + 3 * u, { s: 7.5, f: MONO, c: 'rgba(185,215,245,.5)', ls: 0.8 });
+    }
     // 走査線
     if (this.q < 0.99) {
       const sx = mx + ((this.mo * 0.09) % 1) * mw;
@@ -963,6 +996,7 @@ export class Overlay {
 
     const ry = my + mh + 22 * u;
     this.T('REGION', mx - 2, ry - 4, { s: 11.5, c: DIM, ls: 1.2 });
+    this.w_matrix(mx + mw - 66 * u, ry - 15 * u, 12, 2, 3, 5.5 * u);
     const rh = Math.min(22 * u, (r.y + r.h - ry - 8) / REGIONS.length);
     REGIONS.forEach(([n, c], i) => {
       const y = ry + i * rh;
@@ -979,7 +1013,7 @@ export class Overlay {
     const sel = state.selected;
     const sorted = [...state.assets].sort((a, b) => b.risk - a.risk);
     const rh = (this.compact || this.touch ? 28 : 21.5) * u, top = r.y + 62 * u;
-    const n = Math.max(3, Math.floor((r.y + r.h - top - 6) / rh));
+    const n = Math.max(3, Math.floor((r.y + r.h - top - 6 - 20 * u) / rh));
     let rows = sorted.slice(0, n);
     if (sel >= 0 && !rows.includes(state.assets[sel])) rows[n - 1] = state.assets[sel];
     this.ctx.fillStyle = LINE; this.ctx.fillRect(r.x + 14 * u, r.y + 36 * u, r.w - 28 * u, 1);
@@ -997,6 +1031,7 @@ export class Overlay {
       this.ctx.fillRect(bx, y + rh / 2 - 1, bw * (a.risk / 10), 2 * u);
       this.T(a.risk.toFixed(1), r.x + r.w - 20 * u, y + rh / 2 + 3.5 * u, { s: 12, a: 'right', c: a.risk >= 7 ? '#ffd9d0' : WHITE });
     });
+    this.w_dist(r, state.assets.map((a) => a.risk), `${state.assets.length} NODES`);
   }
 
   elog(r, t) {
@@ -1014,6 +1049,7 @@ export class Overlay {
       this.rr(x, r.y + 38 * u, tw - 3, 22 * u, 3, i === 0 ? 'rgba(140,185,235,.32)' : 'rgba(120,150,190,.08)', i === 0 ? 'rgba(200,230,255,.5)' : LINE);
       this.T(s, x + (tw - 3) / 2, r.y + 53 * u, { s: 11.5, a: 'center', c: i === 0 ? '#fff' : DIM, ls: 0.4 });
     });
+    this.w_bars(r.x + 16 * u, r.y + 64 * u, r.w - 32 * u, 8 * u, 5, 34);
     const rh = 19 * u, top = r.y + 78 * u;
     const n = Math.floor((r.y + r.h - top) / rh);
     const slide = (1 - sm((t - this.lastPush) / 0.5)) * -rh;
@@ -1105,6 +1141,7 @@ export class Overlay {
     ctx.fillStyle = LINE; ctx.fillRect(r.x + 14 * u, y - 10 * u, r.w - 28 * u, 1);
 
     this.T('VULNERABILITY', r.x + 16 * u, y + 14 * u, { s: 13, ls: 0.3 });
+    this.w_matrix(r.x + r.w - 82 * u, y + 3 * u, 12, 2, 7, 5.5 * u);
     y += 36 * u * k;
     const hot = state.graph.nodes.filter((n) => n.hot && n.type === 'CVE').length;
     [['CVE', gc.CVE, 'CVE'], ['CWE', gc.CWE, 'CWE'], ['CAPEC', gc.CAPEC, 'CAPEC'], ['Exploit', hot, 'CVE'], ['ATT&CK Technique', gc['ATT&CK'], 'ATT&CK'], ['Tactic', gc.TACTIC, 'TACTIC']].forEach(([l, v, ty], i) => {
@@ -1118,6 +1155,7 @@ export class Overlay {
     this.T('RISK SCORE', r.x + 16 * u, y + 14 * u, { s: 13, ls: 0.3 });
     const tgt = a ? a.risk : 0;
     this.riskShown += (tgt - this.riskShown) * 0.06;
+    this.w_dial(r.x + r.w - 44 * u, y + 38 * u, 25 * u, this.riskShown / 10, { text: String(Math.round(this.riskShown * 10)), label: 'RISK %' });
     this.T(this.riskShown.toFixed(1), r.x + 16 * u, y + 56 * u * k + 8 * u, { s: 34, w: 400 });
     ctx.font = `400 ${34 * u}px ${SANS}`;
     const nw = ctx.measureText(this.riskShown.toFixed(1)).width;
@@ -1191,6 +1229,8 @@ export class Overlay {
       ctx.stroke();
     });
     this.T('...', r.x + 40 * u, r.y + 44 * u + items.length * rh + 6 * u, { s: 13, c: DIM });
+    const ny = r.y + r.h - 28 * u;
+    if (ny - 18 * u > r.y + 44 * u + items.length * rh + 14 * u) this.w_netFoot(r, ny, 2);
   }
 
   // ---- 下 ----
@@ -1198,6 +1238,11 @@ export class Overlay {
     const { ctx, u } = this;
     const cti = this.state.mode === 'cti', act = cti && this.state.cti.selected >= 0 ? this.state.cti.actors[this.state.cti.selected].activity : null;
     this.title(r, cti ? 'ACTIVITY' : 'TIMELINE', '', cti ? '活動推移' : '時系列');
+    if (r.w > 700 * u) {
+      const pk = Math.round(64 + 28 * noise(this.mo * 0.15)), av = Math.round(30 + 9 * noise(this.mo * 0.1 + 2)), sd = (0.28 + 0.06 * noise(this.mo * 0.2 + 5)).toFixed(2);
+      this.T(`PEAK ${pk}   AVG ${av}   σ ${sd}`, r.x + 236 * u, r.y + 25 * u, { s: 8.5, f: MONO, c: 'rgba(170,200,230,.55)', ls: 1 });
+      this.w_ruler(r.x + 236 * u, r.y + 31 * u, 150 * u, 1);
+    }
     const ranges = ['24H', '6H', '1H', 'LIVE'];
     ranges.forEach((s, i) => {
       const x = r.x + r.w - (ranges.length - i) * 48 * u - 8 * u;
@@ -1265,5 +1310,6 @@ export class Overlay {
 }
 
 installCtiPanels(Overlay, { SANS, MONO, SERIF, CJK, WHITE, DIM, LINE, HI, sm, noise, hash, mod, pad2 });
+installWidgets(Overlay, { MONO, noise, hash, mod });
 
 export { SANS, MONO, SERIF, CJK, WHITE, DIM, sm, noise, hash, mod, pad2 };

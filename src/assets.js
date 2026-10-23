@@ -168,11 +168,12 @@ void main(){
 // ---- ブロックの背面に立つ縦パネル: IP・OS などのメタ情報 ----
 // ブロックの −Z 側の隙間に固定して立てる（カメラには追従しない）。すりガラス風: パネルの向こうの3Dを
 // ぼかした像（post.js の BlurCapture）を地にして、文字を重ねる。手前のブロックに隠れる部分は、文字だけ薄く透かす。
-const PCW = 512, PCH = 352;            // 1枚分のテクスチャ（px）
+const PCW = 512, PCH = 448;            // 1枚分のテクスチャ（px）
 const PW = 3.4, PH = PW * PCH / PCW;   // 板の大きさ（ワールド）
 const PY0 = 0.9;                       // 床からの高さ（手前のブロックの上に文字が出るように浮かせる）
 const PRING = 2.25;                    // ブロック中心から背面の隙間の中心まで
-const BAR = [108, 314, 330, 330];      // ロードバーの枠（x0, y0, x1, y1 / px）
+const BAR = [84, 358, 300, 372];       // ロードバーの枠（x0, y0, x1, y1 / px）
+const SPK = [24, 280, 258, 340];       // スパークグラフの枠。走査マーカーが走る範囲
 const MONO = '"SF Mono", Menlo, Consolas, "DejaVu Sans Mono", "Liberation Mono", monospace';
 
 const PANEL_VERT = /* glsl */`
@@ -207,12 +208,14 @@ void main(){
   vec3 t = texture2D(uMeta, vUv).rgb;
   vec2 bc = (vCell - vec2(${(BAR[0] + 3) / PCW}, ${1 - (BAR[3] - 3) / PCH})) / vec2(${(BAR[2] - BAR[0] - 6) / PCW}, ${(BAR[3] - BAR[1] - 6) / PCH});
   float fill = step(0., bc.x) * step(bc.x, vLoad) * step(0., bc.y) * step(bc.y, 1.);
-  float m = max(max(t.r, t.g), max(t.b, fill));
+  vec2 sp = (vCell - vec2(${SPK[0] / PCW}, ${1 - SPK[3] / PCH})) / vec2(${(SPK[2] - SPK[0]) / PCW}, ${(SPK[3] - SPK[1]) / PCH});
+  float mk = exp(-pow((sp.x - fract(uMT * 0.07 + vSeed * 3.)) / 0.012, 2.)) * step(0., sp.x) * step(sp.x, 1.) * step(0., sp.y) * step(sp.y, 1.) * (1. - uQuiet);   // グラフ上を流れる縦線
+  float m = max(max(max(t.r, t.g), max(t.b, fill)), mk);
   vec3 ice = vec3(0.72, 0.88, 1.0);
   vec3 txt = ice * t.r + vColor * t.g * 1.1 + ice * t.b * 0.6 + vColor * fill * 0.95;
   txt *= (0.55 + 0.75 * vSel) * vOn;
   float sw = exp(-pow((vCell.y - fract(uMT * 0.18 + vSeed)) / 0.05, 2.)) * (1. - uQuiet);   // ゆっくり上る走査光
-  txt += ice * sw * m * 0.35;
+  txt += ice * sw * m * 0.35 + ice * mk * 0.6 * (0.55 + 0.75 * vSel) * vOn;
 #ifdef GHOST
   // 手前のブロックの陰になった部分: 文字だけを薄く透かす
   if (m < 0.05) discard;
@@ -225,6 +228,18 @@ void main(){
   gl_FragColor = vec4(col, 1.);
 #endif
 }`;
+
+// 資産ごとに決まる擬似データ（グラフ・マトリクス用）。状態で形を変える: 危険=荒れた上昇、停止=低く平坦
+function seriesFor(a, n, salt) {
+  const r = rng(a.index * 977 + salt * 131 + 5), out = [];
+  const mid = [0.4, 0.5, 0.58, 0.07][a.state], amp = [0.07, 0.11, 0.16, 0.02][a.state], spike = [0.01, 0.05, 0.1, 0][a.state];
+  let v = mid;
+  for (let i = 0; i < n; i++) {
+    v += (mid - v) * 0.22 + (r() - 0.5) * amp * 2 + (r() < spike ? 0.3 + r() * 0.2 : 0);
+    v = Math.min(0.97, Math.max(0.04, v)); out.push(v);
+  }
+  return out;
+}
 
 // 1枚分を描く。R=文字と枠（氷色）、G=状態色で光らせる部分、B=ロードバーの枠。黒地に加算で重ねる。
 function drawMeta(g, a, ox, oy) {
@@ -239,26 +254,97 @@ function drawMeta(g, a, ox, oy) {
     if ('letterSpacing' in g) g.letterSpacing = `${o.ls || 0}px`;
     g.fillText(s, x, y);
   };
+  const hair = (x, y, w, k = 0.3) => { g.fillStyle = R(k); g.fillRect(x, y, w, 1.5); };
+  const code = (n) => n.toString(16).toUpperCase().padStart(4, '0');
+  const hr = rng(a.index * 313 + 9);
+  const ok = a.state !== 3;
   // 枠は細い矩形だけ
   g.lineWidth = 2; g.strokeStyle = R(0.6);
   g.strokeRect(3, 3, PCW - 6, PCH - 6);
+
   // 見出し
-  tx(a.name, 24, 66, 50, R(1), { w: 700, f: '"Helvetica Neue", Arial, "Hiragino Sans", sans-serif' });
-  tx(a.label.toUpperCase(), 26, 94, 21, R(0.62), { ls: 1.5 });
-  tx('RISK', PCW - 26, 40, 18, G(0.8), { a: 'right', ls: 2 });
-  tx(a.risk.toFixed(1), PCW - 26, 82, 40, G(1), { a: 'right', w: 700 });
-  g.fillStyle = R(0.3); g.fillRect(24, 112, PCW - 48, 1.5);
-  // メタ情報
+  tx(`${a.site} // ${a.owner.toUpperCase()}`, 26, 26, 14, R(0.5), { ls: 2 });
+  tx(a.name, 24, 70, 48, R(1), { w: 700, f: '"Helvetica Neue", Arial, "Hiragino Sans", sans-serif' });
+  tx(a.label.toUpperCase(), 26, 96, 19, R(0.62), { ls: 1.5 });
+  tx('RISK', PCW - 26, 36, 16, G(0.8), { a: 'right', ls: 2 });
+  tx(a.risk.toFixed(1), PCW - 26, 80, 38, G(1), { a: 'right', w: 700 });
+  hair(24, 108, PCW - 48);
+
+  // メタ情報（左）と、ヘルスのダイヤル（右）
   [['IP', a.ip], ['OS', a.os], ['ENV', a.env], ['PORT', a.ports.join(' ')]].forEach(([k, v], n) => {
-    const y = 156 + n * 40;
-    tx(k, 26, y, 22, R(0.58), { ls: 2 });
-    tx(v, 108, y, 32, R(1));
+    const y = 144 + n * 31;
+    tx(k, 26, y, 16, R(0.58), { ls: 2 });
+    tx(v, 84, y, 23, R(1));
   });
+  {
+    const cx = 438, cy = 178, rr = 50, N = 36, health = ok ? Math.round(100 - a.risk * 9.4) : 0;
+    for (let i = 0; i < N; i++) {
+      const th = (135 + 270 * i / (N - 1)) * Math.PI / 180, c = Math.cos(th), s = Math.sin(th), lit = ok && i / (N - 1) <= health / 100;
+      const r0 = i % 5 === 0 ? rr - 11 : rr - 6;
+      g.lineWidth = lit ? 3 : 2; g.strokeStyle = lit ? G(1) : R(i % 5 === 0 ? 0.38 : 0.2);
+      g.beginPath(); g.moveTo(cx + c * r0, cy + s * r0); g.lineTo(cx + c * rr, cy + s * rr); g.stroke();
+    }
+    g.lineWidth = 1.5; g.strokeStyle = R(0.22);
+    g.beginPath(); g.arc(cx, cy, rr - 18, 0, Math.PI * 2); g.stroke();
+    g.strokeStyle = R(0.4);
+    g.beginPath(); g.arc(cx, cy, rr - 18, -Math.PI / 2 - 0.12, -Math.PI / 2 + 0.12); g.stroke();   // 12時の印
+    tx(ok ? String(health) : '--', cx, cy + 8, 28, G(1), { a: 'center', w: 700 });
+    tx('HEALTH', cx, cy + 26, 11, R(0.6), { a: 'center', ls: 2 });
+    tx(`T-${String(a.scanned).padStart(2, '0')}H SCAN`, cx, cy + 66, 13, R(0.45), { a: 'center', ls: 1.5 });
+  }
+  hair(24, 252, PCW - 48, 0.22);
+
+  // スパークグラフ（左）: 折れ線＋方眼。しきい値を超えた点だけ状態色
+  {
+    const [x0, y0, x1, y1] = SPK, w = x1 - x0, h = y1 - y0;
+    tx('TRAFFIC', x0, 272, 13, R(0.55), { ls: 3 });
+    tx(`${code(Math.floor(hr() * 65535))}`, x1, 272, 13, R(0.4), { a: 'right', ls: 1 });
+    g.lineWidth = 1; g.strokeStyle = R(0.12);
+    for (let i = 0; i <= 3; i++) { const yy = y0 + h * i / 3; g.beginPath(); g.moveTo(x0, yy); g.lineTo(x1, yy); g.stroke(); }
+    for (let i = 0; i <= 6; i++) { const xx = x0 + w * i / 6; g.beginPath(); g.moveTo(xx, y0); g.lineTo(xx, y1); g.stroke(); }
+    const ser = seriesFor(a, 40, 1), px = (i) => x0 + w * i / (ser.length - 1), py = (v) => y1 - 3 - v * (h - 6);
+    g.lineWidth = 2; g.strokeStyle = R(0.85); g.lineJoin = 'round';
+    g.beginPath(); ser.forEach((v, i) => (i ? g.lineTo(px(i), py(v)) : g.moveTo(px(i), py(v)))); g.stroke();
+    g.fillStyle = G(1);
+    ser.forEach((v, i) => { if (v > 0.8) g.fillRect(px(i) - 3, py(v) - 3, 6, 6); });
+    g.lineWidth = 2; g.strokeStyle = G(1);
+    g.beginPath(); g.arc(px(ser.length - 1) - 3, py(ser[ser.length - 1]), 4, 0, Math.PI * 2); g.stroke();
+  }
+  // ヒストグラム（右）: 日ごとの件数。上位のバーだけ状態色
+  {
+    const x0 = 280, x1 = PCW - 24, y0 = 280, y1 = 340, n = 26, pitch = (x1 - x0) / n, bs = seriesFor(a, n, 2);
+    tx('EVENTS', x0, 272, 13, R(0.55), { ls: 3 });
+    tx('24H', x1, 272, 13, R(0.4), { a: 'right', ls: 2 });
+    bs.forEach((v, i) => {
+      const bh = Math.max(2, v * (y1 - y0));
+      g.fillStyle = v > 0.78 ? G(1) : R(i === n - 1 ? 0.95 : 0.55);
+      g.fillRect(x0 + i * pitch, y1 - bh, pitch - 2.5, bh);
+    });
+    hair(x0, y1 + 1, x1 - x0, 0.3);
+  }
+
   // ロードバー（中身は負荷に合わせてシェーダーで塗る）と、アラート数
-  tx('LOAD', 26, BAR[3], 20, R(0.58), { ls: 2 });
+  tx('LOAD', 26, BAR[3], 16, R(0.58), { ls: 2 });
   g.lineWidth = 2; g.strokeStyle = Bl(1); g.strokeRect(BAR[0], BAR[1], BAR[2] - BAR[0], BAR[3] - BAR[1]);
-  if (a.alerts) tx(`▲ ${a.alerts}`, PCW - 26, 336, 30, G(1), { a: 'right', w: 700 });
-  else tx('CLEAR', PCW - 26, 334, 22, R(0.55), { a: 'right', ls: 2 });
+  if (a.alerts) tx(`▲ ${a.alerts} ALERT`, PCW - 26, BAR[3] + 1, 20, G(1), { a: 'right', w: 700 });
+  else tx('CLEAR', PCW - 26, BAR[3], 17, R(0.55), { a: 'right', ls: 2 });
+
+  // ドットマトリクス（左）と、16進の読み出し（右）
+  {
+    const x0 = 26, y0 = 394, cols = 22, rows = 4, pitch = 10, hot = a.state === 3 ? 0.04 : a.state === 2 ? 0.5 : a.state === 1 ? 0.34 : 0.22;
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+      const v = hr(), x = x0 + c * pitch, y = y0 + r * pitch;
+      if (v < hot * 0.35) { g.fillStyle = G(1); g.fillRect(x, y, 7, 7); }
+      else if (v < hot) { g.fillStyle = R(0.9); g.fillRect(x, y, 7, 7); }
+      else { g.fillStyle = R(0.22); g.fillRect(x + 2, y + 2, 3, 3); }
+    }
+    const hx = 268;
+    tx(`0x${code(Math.floor(hr() * 65535))} ${code(Math.floor(hr() * 65535))} ${code(Math.floor(hr() * 65535))}`, hx, 410, 15, R(0.62), { ls: 1 });
+    tx(`0x${code(Math.floor(hr() * 65535))} ${code(Math.floor(hr() * 65535))} ${code(Math.floor(hr() * 65535))}`, hx, 428, 15, R(0.38), { ls: 1 });
+    tx(`SEC ${a.gx + 1}-${a.gz + 1} // N-${String.fromCharCode(65 + a.index % 8)}${a.index % 9 + 1}`, hx, 394, 12, R(0.5), { ls: 2 });
+  }
+  // 下端の目盛り
+  for (let i = 0, x = 26; x < PCW - 24; i++, x += 8) { g.fillStyle = R(i % 5 === 0 ? 0.4 : 0.18); g.fillRect(x, PCH - 14, 1.5, i % 5 === 0 ? 7 : 4); }
   g.restore();
 }
 

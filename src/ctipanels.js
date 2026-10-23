@@ -80,6 +80,7 @@ export function installCtiPanels(Overlay, K) {
     // 地域ごとの攻撃者数
     const ry0 = my + mh + 22 * u;
     this.T('ATTRIBUTION', mx - 2, ry0 - 4, { s: 11.5, c: DIM, ls: 1.2 });
+    this.w_matrix(mx + mw - 66 * u, ry0 - 15 * u, 12, 2, 5, 5.5 * u);
     const rows = Object.entries(seenReg).sort((p, q) => q[1] - p[1]);
     const rh = Math.min(22 * u, (r.y + r.h - ry0 - 8) / rows.length);
     rows.forEach(([n, c], i) => {
@@ -97,7 +98,7 @@ export function installCtiPanels(Overlay, K) {
     this.title(r, 'THREAT ACTORS', 's', '脅威主体');
     const sorted = [...C.actors].sort((a, b) => b.sev - a.sev);
     const rh = (this.compact || this.touch ? 28 : 21.5) * u, top = r.y + 62 * u;
-    const n = Math.max(3, Math.floor((r.y + r.h - top - 6) / rh));
+    const n = Math.max(3, Math.floor((r.y + r.h - top - 6 - 20 * u) / rh));
     const rows = sorted.slice(0, n);
     if (C.selected >= 0 && !rows.includes(C.actors[C.selected])) rows[n - 1] = C.actors[C.selected];
     ctx.fillStyle = LINE; ctx.fillRect(r.x + 14 * u, r.y + 36 * u, r.w - 28 * u, 1);
@@ -116,6 +117,7 @@ export function installCtiPanels(Overlay, K) {
       ctx.fillRect(bx, y + rh / 2 - 1, bw * (a.sev / 10), 2 * u);
       this.T(a.sev.toFixed(1), r.x + r.w - 20 * u, y + rh / 2 + 3.5 * u, { s: 12, a: 'right', c: a.sev >= 8.5 ? '#ffd9d0' : WHITE });
     });
+    this.w_dist(r, C.actors.map((a) => a.sev), `${C.actors.length} ACTORS`);
   };
 
   const TAGC = { IOC: 'IOC', TTP: 'TTP', RPT: 'CAMPAIGN' };
@@ -139,6 +141,7 @@ export function installCtiPanels(Overlay, K) {
       this.rr(x, r.y + 38 * u, tw - 3, 22 * u, 3, i === 0 ? ac(.22) : 'rgba(120,150,190,.08)', i === 0 ? ac(.55) : LINE);
       this.T(s, x + (tw - 3) / 2, r.y + 53 * u, { s: 11.5, a: 'center', c: i === 0 ? '#fff' : DIM, ls: 0.4 });
     });
+    this.w_bars(r.x + 16 * u, r.y + 64 * u, r.w - 32 * u, 8 * u, 9, 34);
     const rh = 19 * u, top = r.y + 78 * u, n = Math.floor((r.y + r.h - top) / rh);
     const slide = (1 - sm((t - this.lastPush) / 0.5)) * -rh;
     this.hit.elog = this.ilog.slice(0, n + 1).map((e, i) => [top + i * rh - 4 * u, top + (i + 1) * rh - 4 * u, e.actor]);
@@ -210,6 +213,7 @@ export function installCtiPanels(Overlay, K) {
     ctx.fillStyle = LINE; ctx.fillRect(r.x + 14 * u, y - 10 * u, r.w - 28 * u, 1);
     this.T('ARSENAL', r.x + 16 * u, y + 14 * u, { s: 13, ls: 0.3 });
     this.T('装備', r.x + 92 * u, y + 14 * u, { s: 10, c: DIM, ls: 2.5 });
+    this.w_matrix(r.x + r.w - 82 * u, y + 3 * u, 12, 2, 11, 5.5 * u);
     y += 36 * u * k;
     cnt.forEach(([l, v, ty], i) => {
       this.cube(r.x + 22 * u, y + i * rowH - 4 * u, 5 * u, typeCss(ty, 0.95));
@@ -219,6 +223,7 @@ export function installCtiPanels(Overlay, K) {
     y += 6 * rowH + 2 * u;
     ctx.fillStyle = LINE; ctx.fillRect(r.x + 14 * u, y - 10 * u, r.w - 28 * u, 1);
     this.T('THREAT SCORE', r.x + 16 * u, y + 14 * u, { s: 13, ls: 0.3 });
+    this.w_dial(r.x + r.w - 44 * u, y + 38 * u, 25 * u, this.riskShown / 10, { text: String(Math.round(this.riskShown * 10)), label: 'SEV %' });
     this.T(this.riskShown.toFixed(1), r.x + 16 * u, y + 56 * u * k + 8 * u, { s: 34, w: 400 });
     ctx.font = `400 ${34 * u}px ${SANS}`;
     const sw = ctx.measureText(this.riskShown.toFixed(1)).width;
@@ -258,6 +263,8 @@ export function installCtiPanels(Overlay, K) {
       ctx.stroke();
     });
     this.T('...', r.x + 40 * u, r.y + 44 * u + items.length * rh + 6 * u, { s: 13, c: DIM });
+    const ny = r.y + r.h - 28 * u;
+    if (ny - 18 * u > r.y + 44 * u + items.length * rh + 14 * u) this.w_netFoot(r, ny, 6);
   };
   void hash;
 }

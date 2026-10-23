@@ -154,6 +154,13 @@ export class Cli {
         c.setSetting('quiet', on);
         this.say(`quiet → ${on ? 'on  静穏（点滅・動きを抑制）' : 'off'}`, 'ok');
       }, comp: () => ['on', 'off'] },
+      { n: ['hud', 'hide'], a: '[on|off]', d: 'オーバーレイのパネルを隠す / 戻す（on=隠す。キー H）', run: (x) => {
+        const w = (x[0] || '').toLowerCase();
+        if (w && !['on', 'off'].includes(w)) return this.say('usage: hud [on|off]   (on = hide panels)', 'err');
+        const hide = w ? w === 'on' : !c.getHud();
+        c.setHud(hide);
+        this.say(`panels → ${hide ? 'hidden  パネルを退避' : 'shown  パネルを表示'}`, 'ok');
+      }, comp: () => ['on', 'off'] },
       { n: ['config', 'cfg', 'settings'], a: '', d: '設定画面を開く', run: () => { this.close(); c.openConfig(); } },
       { n: ['set'], a: '[key] [value]', d: '設定の一覧 / 変更（例: set panels off）。`set reset` で初期化', run: (x) => {
         if (!x.length) {

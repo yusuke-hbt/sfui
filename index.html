@@ -71,7 +71,7 @@
     -webkit-backdrop-filter: blur(9px) saturate(1.1); backdrop-filter: blur(9px) saturate(1.1);
   }
   #topBtns { position: fixed; top: 6px; right: 14px; z-index: 20; display: flex; gap: 8px; }
-  #fsBtn, #modeBtn, #quietBtn, #cfgBtn {
+  #fsBtn, #modeBtn, #quietBtn, #cfgBtn, #hudBtn {
     height: 19px; padding: 0 12px 0 14px; cursor: pointer;
     font: 400 9px/19px ui-monospace, "SF Mono", Menlo, Consolas, var(--serif); letter-spacing: .12em; color: var(--btn-fg);
     background: var(--btn); border: 0; box-shadow: inset 0 0 0 1px var(--btn-ln);
@@ -80,8 +80,8 @@
   }
   #modeBtn { box-shadow: inset 0 0 0 1px var(--mode-ln); color: var(--mode-fg); background: var(--mode-bg); }
   #modeBtn:hover { background: var(--mode-hover); color: #fff; }
-  #fsBtn:hover, #quietBtn:hover, #cfgBtn:hover { background: var(--btn-hover); color: #fff; }
-  #quietBtn.on { background: var(--chip-on); color: #fff; box-shadow: inset 0 0 0 1px var(--chip-on-ln); }
+  #fsBtn:hover, #quietBtn:hover, #cfgBtn:hover, #hudBtn:hover { background: var(--btn-hover); color: #fff; }
+  #quietBtn.on, #hudBtn.on { background: var(--chip-on); color: #fff; box-shadow: inset 0 0 0 1px var(--chip-on-ln); }
   /* 操作チップ（狭い画面・タッチ端末）: パネル切り替え、前後のアセット、コマンド、全画面 */
   #chips { position: fixed; z-index: 6; display: none; gap: 6px; box-sizing: border-box; }
   #chips .sc { flex: 1 1 0; min-width: 0; display: flex; gap: 6px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; touch-action: pan-x; }
@@ -147,7 +147,7 @@
   .cfg-foot .note { font: 500 10px/1.4 var(--serif); letter-spacing: .06em; opacity: .5; }
   .cfg-reset { flex: none; height: 26px; padding: 0 14px; border: 0; cursor: pointer; color: var(--btn-fg); background: var(--btn); box-shadow: inset 0 0 0 1px var(--btn-ln); font: 400 9px/26px ui-monospace, "SF Mono", Menlo, Consolas, monospace; letter-spacing: .12em; }
   /* 上部ボタンは狭めのPC画面ではアイコンだけにする */
-  #quietBtn .tx, #cfgBtn .tx { display: none; }   /* 静穏・設定は常にアイコンだけ（状態は色で分かる） */
+  #quietBtn .tx, #cfgBtn .tx, #hudBtn .tx { display: none; }   /* 静穏・設定は常にアイコンだけ（状態は色で分かる） */
   @media (max-width: 1499px) { #topBtns .tx { display: none; } #topBtns button { padding: 0 11px; } }
   #loginGo {
     position: fixed; display: none; z-index: 12; border: 0; cursor: pointer; color: #eaf8ff; letter-spacing: .22em;
@@ -158,7 +158,7 @@
   #loginGo:active { background: rgba(160, 210, 255, .5); }
   @media (max-width: 899px) {
     #topBtns { top: 70px; left: 12px; right: auto; gap: 6px; z-index: 8; }
-    #topBtns #modeBtn, #topBtns #quietBtn { display: none; }
+    #topBtns #modeBtn, #topBtns #quietBtn, #topBtns #hudBtn { display: none; }
     #topBtns #fsBtn, #topBtns #cfgBtn { width: 34px; height: 34px; padding: 0; text-align: center; font-size: 16px; line-height: 34px;
       background: var(--chip-bg); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); box-shadow: inset 0 0 0 1px var(--chip-ln); color: var(--chip-fg); }
     .cfg-row { min-height: 46px; }
@@ -175,8 +175,8 @@
 </style>
 <script type="importmap">
 { "imports": {
-  "three": "./node_modules/three/build/three.module.js",
-  "three/addons/": "./node_modules/three/examples/jsm/"
+  "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/"
 } }
 </script>
 </head>
@@ -185,7 +185,7 @@
 <div id="labels"></div>
 <div id="glass"></div>
 <canvas id="overlay"></canvas>
-<div id="topBtns"><button id="quietBtn" tabindex="-1"></button><button id="modeBtn" tabindex="-1"></button><button id="cfgBtn" tabindex="-1" title="CONFIG ／ 設定"><span class="ic">⚙</span><span class="tx"> CONFIG ／ 設定</span></button><button id="fsBtn" tabindex="-1"></button></div>
+<div id="topBtns"><button id="hudBtn" tabindex="-1"></button><button id="quietBtn" tabindex="-1"></button><button id="modeBtn" tabindex="-1"></button><button id="cfgBtn" tabindex="-1" title="CONFIG ／ 設定"><span class="ic">⚙</span><span class="tx"> CONFIG ／ 設定</span></button><button id="fsBtn" tabindex="-1"></button></div>
 <div id="safe"></div>
 <input id="cliIn" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="80" enterkeyhint="send" aria-label="command">
 <div id="login">
